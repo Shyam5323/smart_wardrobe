@@ -1,103 +1,170 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+import { useState } from 'react';
+import Link from 'next/link';
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+import { useAuth } from '@/components/providers/AuthProvider';
+import { UploadPanel } from '@/components/wardrobe/UploadPanel';
+import { WardrobeGrid } from '@/components/wardrobe/WardrobeGrid';
+import { ItemDetailSheet } from '@/components/wardrobe/ItemDetailSheet';
+import { useWardrobe } from '@/hooks/useWardrobe';
+import type { ClothingItemResponse, UpdateClothingItemPayload } from '@/lib/api';
+
+export default function HomePage() {
+  const { status, user, logout } = useAuth();
+  const {
+    items,
+    isLoading,
+    isUploading,
+    error,
+    upload,
+    refresh,
+    fetchById,
+    update,
+    remove,
+    clearError,
+  } = useWardrobe();
+
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ClothingItemResponse | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isDetailSaving, setIsDetailSaving] = useState(false);
+  const [isDetailDeleting, setIsDetailDeleting] = useState(false);
+
+  if (status === 'loading') {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <span className="text-sm text-slate-400">Loading your wardrobe…</span>
+      </div>
+    );
+  }
+
+  if (status === 'unauthenticated') {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-4xl flex-col items-center justify-center gap-8 px-6 text-center">
+        <div className="space-y-4">
+          <h1 className="text-4xl font-semibold tracking-tight text-slate-100 sm:text-5xl">
+            Build your smart wardrobe
+          </h1>
+          <p className="text-base text-slate-400 sm:text-lg">
+            Sign in or create an account to upload clothing pieces, track outfits, and get AI-powered styling.
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          <Link
+            href="/login"
+            className="rounded-full bg-indigo-500 px-6 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/signup"
+            className="rounded-full border border-slate-700 px-6 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
+          >
+            Create account
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-6 py-12">
+      <header className="mb-12 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Wardrobe Uploader</h1>
+          <p className="mt-2 text-sm text-slate-400 sm:text-base">
+            Add pieces to your virtual closet and preview them instantly before AI styling kicks in.
+          </p>
+        </div>
+        <div className="flex items-center gap-4 rounded-full border border-slate-800 bg-slate-900/60 px-4 py-2 text-sm">
+          <div className="text-left">
+            <p className="font-medium text-slate-100">{user?.displayName || user?.email}</p>
+            <p className="text-xs text-slate-500">{user?.email}</p>
+          </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-300 transition hover:bg-slate-700"
+          >
+            Log out
+          </button>
+        </div>
+      </header>
+
+      <section className="grid gap-10 lg:grid-cols-[360px_1fr]">
+        <UploadPanel
+          onUpload={upload}
+          isUploading={isUploading}
+          error={error}
+          onErrorClear={clearError}
+        />
+        <WardrobeGrid
+          items={items}
+          isLoading={isLoading}
+          onRefresh={refresh}
+          onSelectItem={async (id) => {
+            setIsDetailOpen(true);
+            setIsDetailLoading(true);
+            setDetailError(null);
+            try {
+              const item = await fetchById(id);
+              setSelectedItem(item);
+            } catch (err) {
+              setDetailError(err instanceof Error ? err.message : 'Unable to load item.');
+            } finally {
+              setIsDetailLoading(false);
+            }
+          }}
+        />
+      </section>
+
+      <ItemDetailSheet
+        item={selectedItem}
+        isOpen={isDetailOpen}
+        isLoading={isDetailLoading}
+        isSaving={isDetailSaving}
+        isDeleting={isDetailDeleting}
+        error={detailError}
+        onClose={() => {
+          if (isDetailSaving || isDetailDeleting) return;
+          setIsDetailOpen(false);
+          setSelectedItem(null);
+          setDetailError(null);
+        }}
+        onSave={async (payload: UpdateClothingItemPayload) => {
+          if (!selectedItem) return;
+          setIsDetailSaving(true);
+          setDetailError(null);
+          try {
+            const updated = await update(selectedItem._id, payload);
+            setSelectedItem(updated);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unable to save changes.';
+            setDetailError(message);
+            throw err;
+          } finally {
+            setIsDetailSaving(false);
+          }
+        }}
+        onDelete={async () => {
+          if (!selectedItem) return;
+          setIsDetailDeleting(true);
+          setDetailError(null);
+          try {
+            await remove(selectedItem._id);
+            setSelectedItem(null);
+            setIsDetailOpen(false);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unable to delete item.';
+            setDetailError(message);
+            throw err;
+          } finally {
+            setIsDetailDeleting(false);
+          }
+        }}
+      />
     </div>
   );
 }

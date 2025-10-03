@@ -1,0 +1,21 @@
+{
+  "name": "wolfram-image-prototype",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Prototype helper scripts for experimenting with Wolfram ImageIdentify via the Wolfram|Alpha HTTP API.",
+  "scripts": {
+    "identify": "node identify.js",
+    "dry": "node identify.js --dry-run"
+  },
+  "keywords": [
+    "wolfram",
+    "imageidentify",
+    "prototype"
+  ],
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "sharp": "^0.33.4"
+  }
+}
