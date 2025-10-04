@@ -1,13 +1,27 @@
-// components/wardrobe/WardrobeGrid.tsx
+'use client';
+
 import Image from 'next/image';
+import { IndianRupee, Repeat, Filter } from 'lucide-react';
 import type { ClothingItemResponse } from '@/lib/api';
 
+// Props are the same as your friend's original code
 export type WardrobeGridProps = {
   items: ClothingItemResponse[];
   isLoading: boolean;
   onRefresh: () => void;
   onSelectItem?: (id: string) => void;
 };
+
+// A simple filter control component
+const FilterControls = () => (
+  <div className="flex flex-wrap items-center gap-2 mb-6">
+    <Filter size={16} className="text-slate-500" />
+    <button className="px-3 py-1 text-sm bg-slate-800 rounded-full hover:bg-slate-700">All</button>
+    <button className="px-3 py-1 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-100">Tops</button>
+    <button className="px-3 py-1 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-100">Bottoms</button>
+    <button className="px-3 py-1 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-100">Shoes</button>
+  </div>
+);
 
 export const WardrobeGrid = ({ items, isLoading, onRefresh, onSelectItem }: WardrobeGridProps) => {
   return (
@@ -23,6 +37,8 @@ export const WardrobeGrid = ({ items, isLoading, onRefresh, onSelectItem }: Ward
         </button>
       </div>
 
+      <FilterControls />
+
       {isLoading ? (
         <div className="flex h-48 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/40">
           <span className="text-sm text-slate-400">Loading items…</span>
@@ -34,7 +50,6 @@ export const WardrobeGrid = ({ items, isLoading, onRefresh, onSelectItem }: Ward
           </span>
         </div>
       ) : (
-        // THIS DIV CREATES THE RESPONSIVE GRID FOR THE CARDS
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
           {items.map((item) => (
             <button
@@ -47,7 +62,7 @@ export const WardrobeGrid = ({ items, isLoading, onRefresh, onSelectItem }: Ward
                 {item.imageUrl ? (
                   <Image
                     src={item.imageUrl}
-                    alt={item.originalName || 'Wardrobe item'}
+                    alt={item.customName || item.originalName || 'Wardrobe item'}
                     fill
                     className="object-cover"
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -62,10 +77,22 @@ export const WardrobeGrid = ({ items, isLoading, onRefresh, onSelectItem }: Ward
                 <p className="truncate font-semibold text-slate-100">
                   {item.customName || item.originalName}
                 </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  {item.category && <span className="rounded-full border border-slate-700 px-2 py-0.5">{item.category}</span>}
-                  {item.color && <span className="rounded-full border border-slate-700 px-2 py-0.5">{item.color}</span>}
+                
+                {/* --- START OF NEW FEATURES --- */}
+                <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+                  <div className="flex items-center gap-1">
+                    <Repeat size={14} />
+                    {/* In a real app, this data would come from your item object */}
+                    <span>Worn {Math.floor(Math.random() * 20)} times</span>
+                  </div>
+                  <div className="flex items-center gap-1 font-medium text-emerald-400">
+                    <IndianRupee size={14} />
+                    {/* This would be a calculation */}
+                    <span>{Math.floor(Math.random() * 50 + 10)} / wear</span>
+                  </div>
                 </div>
+                {/* --- END OF NEW FEATURES --- */}
+
               </div>
             </button>
           ))}
