@@ -1,318 +1,223 @@
-#!/usr/bin/env node
-
 import 'dotenv/config';
-import process from 'node:process';
-import fs from 'node:fs/promises';
-import sharp from 'sharp';
+import fetch from 'node-fetch';
+import fs from 'fs';
+import FormData from 'form-data';
+import path from 'path';
 
-const DEFAULT_ENDPOINT = process.env.WOLFRAM_API_URL || 'https://api.wolframalpha.com/v2/query';
-const MAX_DIMENSION = Number(process.env.WOLFRAM_MAX_DIMENSION) || 256;
-const TARGET_FORMAT = 'jpeg';
+const IMAGE_PATH = "C:\\Users\\shyam\\Downloads\\short.jpg";
+const WOLFRAM_BG_REMOVAL_API = 'https://www.wolframcloud.com/obj/shyammm53/clothing-background-removal';
+const WOLFRAM_IDENTIFY_API = 'https://www.wolframcloud.com/obj/shyammm53/ImageIdentifyAPI';
+const WOLFRAM_COLOR_API = 'https://www.wolframcloud.com/obj/shyammm53/clothing-color-name';
 
-function parseArgs(argv) {
-  const options = {
-    top: 3,
-    raw: false,
-    dryRun: false,
-    help: false,
-    file: null
-  };
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i];
-    switch (token) {
-      case '--url':
-      case '-u':
-        options.url = argv[i + 1];
-        i += 1;
-        break;
-      case '--top':
-      case '-t':
-        options.top = parseInt(argv[i + 1], 10) || options.top;
-        i += 1;
-        break;
-      case '--raw':
-        options.raw = true;
-        break;
-      case '--dry-run':
-        options.dryRun = true;
-        break;
-      case '--file':
-      case '-f':
-        options.file = argv[i + 1];
-        i += 1;
-        break;
-      case '--help':
-      case '-h':
-        options.help = true;
-        break;
-      default:
-        throw new Error(`Unknown option: ${token}`);
+// Color classification function
+function rgbToHSV(r, g, b) {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const diff = max - min;
+  
+  let h = 0;
+  const s = max === 0 ? 0 : diff / max;
+  const v = max;
+  
+  if (diff !== 0) {
+    if (max === r) {
+      h = ((g - b) / diff + (g < b ? 6 : 0)) / 6;
+    } else if (max === g) {
+      h = ((b - r) / diff + 2) / 6;
+    } else {
+      h = ((r - g) / diff + 4) / 6;
     }
   }
-
-  return options;
+  
+  return { h, s, v };
 }
 
-function printUsage() {
-  console.log(`Usage: node identify.js (--url <https image url> | --file <local path>) [options]\n\nOptions:\n  --url, -u      Remote image URL to classify\n  --file, -f     Local file path to an image (alternative to --url)\n  --top, -t      Limit how many identifications to keep (default: 3)\n  --raw          Print the full Wolfram JSON payload\n  --dry-run      Show the query without calling the API\n  --help, -h     Display this help message`);
-}
-
-async function optimizeImageBuffer(buffer) {
-  try {
-    const image = sharp(buffer, { failOn: 'none' });
-    const metadata = await image.metadata();
-
-    let pipeline = image;
-    if ((metadata.width ?? 0) > MAX_DIMENSION || (metadata.height ?? 0) > MAX_DIMENSION) {
-      pipeline = pipeline.resize({
-        width: MAX_DIMENSION,
-        height: MAX_DIMENSION,
-        fit: 'inside'
-      });
-    }
-
-    const outputBuffer = await pipeline.jpeg({ quality: 80 }).toBuffer();
-    return {
-      buffer: outputBuffer,
-      format: 'JPEG',
-      width: metadata.width,
-      height: metadata.height,
-      originalBytes: buffer.byteLength,
-      optimizedBytes: outputBuffer.byteLength
-    };
-  } catch (error) {
-    console.warn('Warning: unable to optimize image, using original buffer.', error.message);
-    return {
-      buffer,
-      format: 'JPEG',
-      width: null,
-      height: null,
-      originalBytes: buffer.byteLength,
-      optimizedBytes: buffer.byteLength
-    };
+function classifyColor(rgb) {
+  const [r, g, b] = rgb;
+  const { h, s, v } = rgbToHSV(r, g, b);
+  
+  // Low saturation = grayscale
+  if (s < 0.15) {
+    if (v < 0.2) return 'Black';
+    if (v < 0.4) return 'Dark Gray';
+    if (v < 0.6) return 'Gray';
+    if (v < 0.8) return 'Light Gray';
+    return 'White';
   }
+  
+  // Classify by hue
+  if (h < 15/360 || h > 345/360) return 'Red';
+  if (h < 45/360) return 'Orange';
+  if (h < 75/360) return 'Yellow';
+  if (h < 150/360) return 'Green';
+  if (h < 200/360) return 'Cyan';
+  if (h < 260/360) return 'Blue';
+  if (h < 300/360) return 'Purple';
+  if (h < 330/360) return 'Pink';
+  return 'Red';
 }
 
-async function loadLocalImageBuffer(filePath) {
-  if (!filePath) {
-    throw new Error('Missing local file path when attempting to load an image.');
-  }
-
-  const buffer = await fs.readFile(filePath);
-  return optimizeImageBuffer(buffer);
+function rgbToHex(rgb) {
+  return rgb.map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
-function normalizeConfidence(value) {
-  if (value == null || Number.isNaN(value)) return null;
-  const numeric = Number(value);
-  if (Number.isNaN(numeric)) return null;
-  if (numeric > 1) {
-    const percent = numeric / 100;
-    if (percent <= 1) {
-      return Number(percent.toFixed(4));
-    }
-  }
-  return Number(Math.min(1, Math.max(0, numeric)).toFixed(4));
+// async function removeBackground(imagePath) {
+//   console.log('🎨 Removing background from image...\n');
+
+//   const form = new FormData();
+//   form.append('image', fs.createReadStream(imagePath));
+//   form.append('model', 'Salient');  // Best for clothing items
+//   form.append('quality', 'Standard');
+
+//   const res = await fetch(WOLFRAM_BG_REMOVAL_API, {
+//     method: 'POST',
+//     body: form,
+//     headers: form.getHeaders(),
+//   });
+
+//   if (!res.ok) {
+//     throw new Error(`Background removal failed: ${res.statusText}`);
+//   }
+
+//   const buffer = await res.buffer();
+  
+//   // Save the processed image
+//   const outputPath = path.join(
+//     path.dirname(imagePath),
+//     `${path.basename(imagePath, path.extname(imagePath))}_no_bg.png`
+//   );
+  
+//   fs.writeFileSync(outputPath, buffer);
+//   console.log(`✅ Background removed! Saved to: ${outputPath}\n`);
+  
+//   return outputPath;
+// }
+
+// async function identifyImage(imagePath) {
+//   console.log('🔍 Identifying clothing item...\n');
+
+//   const form = new FormData();
+//   form.append('image', fs.createReadStream(imagePath));
+
+//   const res = await fetch(WOLFRAM_IDENTIFY_API, {
+//     method: 'POST',
+//     body: form,
+//     headers: form.getHeaders(),
+//   });
+//   console.log('Raw response status:', res.status);
+
+//   const text = await res.text();
+  
+//   try {
+//     const results = JSON.parse(text);
+    
+//     console.log('✅ Recognition Results:\n');
+    
+//     // Sort by probability (highest first)
+//     const sorted = Object.entries(results)
+//       .sort(([, a], [, b]) => b - a);
+    
+//     sorted.forEach(([item, prob], index) => {
+//       const percentage = (prob * 100).toFixed(1);
+//       const bar = '█'.repeat(Math.round(prob * 20));
+//       console.log(`${index + 1}. ${item.padEnd(20)} ${percentage}% ${bar}`);
+//     });
+    
+//     console.log('\n🎯 Best match:', sorted[0][0]);
+    
+//     return sorted[0][0];
+    
+//   } catch (err) {
+//     console.error('❌ Failed to parse JSON:', err.message);
+//     console.log('Response:', text.substring(0, 500));
+//     throw err;
+//   }
+// }
+function parseWolframRGB(text) {
+  // Example input: NearestColorName[RGBColor[0.626162, 0.587374, 0.578228]]
+  const regex = /RGBColor\[\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\s*\]/;
+  const match = text.match(regex);
+  if (!match) return null;
+
+  // Convert to 0-255 range
+  const rgb = match.slice(1, 4).map(v => Math.round(parseFloat(v) * 255));
+  return rgb; // [R, G, B]
 }
 
-function extractCandidates(queryResult, limit = 3) {
-  const pods = queryResult?.pods ?? [];
-  if (!Array.isArray(pods) || pods.length === 0) return [];
 
-  const candidatePod = pods.find((pod) => {
-    const id = pod.id?.toLowerCase() ?? '';
-    const title = pod.title?.toLowerCase() ?? '';
-    return id.includes('imageidentify') || title.includes('identification') || title.includes('result');
-  }) || pods[0];
+async function analyzeColors(imagePath) {
+  console.log('🎨 Analyzing colors...\n');
 
-  const lines = candidatePod.subpods?.flatMap((subpod) => {
-    if (!subpod?.plaintext) return [];
-    return subpod.plaintext
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-  }) ?? [];
+  const form = new FormData();
+  form.append('image', fs.createReadStream(imagePath));
+  form.append('numColors', '5');
 
-  const candidates = lines.map((line) => {
-    const cleaned = line.replace(/^\d+\.\s*/, '').replace(/→/g, '->');
-    const confidenceMatch = cleaned.match(/^(.*?)(?:\s*\(([-+]?\d*\.?\d+%?)\))?$/);
-    let label = cleaned;
-    let confidence = null;
-
-    if (confidenceMatch) {
-      const [, rawLabel, rawConfidence] = confidenceMatch;
-      label = rawLabel?.trim() ?? cleaned;
-      if (rawConfidence) {
-        const numeric = rawConfidence.endsWith('%')
-          ? parseFloat(rawConfidence) / 100
-          : parseFloat(rawConfidence);
-        confidence = normalizeConfidence(numeric);
-      }
-    }
-
-    return {
-      label,
-      confidence
-    };
+  const res = await fetch(WOLFRAM_COLOR_API, {
+    method: 'POST',
+    body: form,
+    headers: form.getHeaders(),
   });
 
-  if (limit && Number.isInteger(limit) && limit > 0) {
-    return candidates.slice(0, limit);
-  }
+  const text = await res.text();
+  console.log('Raw response', text);
 
-  return candidates;
-}
-
-async function run() {
-  let options;
   try {
-    options = parseArgs(process.argv.slice(2));
-  } catch (error) {
-    console.error(error.message);
-    printUsage();
-    process.exit(1);
+    const rgb = parseWolframRGB(text);
+    if (!rgb) throw new Error('Failed to extract RGB');
+
+    const name = classifyColor(rgb);
+
+    const hex = rgbToHex(rgb); 
+
+    console.log(`🎯 Primary Color: ${name}`);
+    console.log(`RGB: ${rgb.join(', ')}  HEX: #${hex}`);
+
+    return {
+      dominantColor: name,
+      colors: [{ name, rgb, hex }]
+    };
+
+  } catch (err) {
+    console.error('❌ Failed to parse color data:', err.message);
+    console.log('Response:', text.substring(0, 500));
+    throw err;
   }
-
-  if (options.help) {
-    printUsage();
-    process.exit(0);
-  }
-
-  if (!options.url && !options.file) {
-    console.error('Missing required image source. Provide either --url <https image url> or --file <local path>.');
-    printUsage();
-    process.exit(1);
-  }
-
-  if (options.url && !options.url.startsWith('http')) {
-    console.error('The --url option must be an absolute HTTP(S) URL. For local files, use --file instead.');
-    process.exit(1);
-  }
-
-  const appId = process.env.WOLFRAM_APP_ID;
-  if (!appId && !options.dryRun) {
-    console.error('WOLFRAM_APP_ID is not set. Add it to research/wolfram/.env before running identify.js');
-    process.exit(1);
-  }
-
-  const usingRemoteUrl = Boolean(options.url);
-  const sourceSummary = usingRemoteUrl ? `remote: ${options.url}` : `file: ${options.file}`;
-
-  let imagePayload = null;
-  let wolframQuery;
-
-  if (usingRemoteUrl) {
-    const sanitizedUrl = options.url.replace(/"/g, '\\"');
-    wolframQuery = `ImageIdentify[ImageURL[\"${sanitizedUrl}\"]]`;
-  } else {
-    imagePayload = await loadLocalImageBuffer(options.file);
-    const base64Image = imagePayload.buffer.toString('base64');
-    wolframQuery = `ImageIdentify[ImportString[\"${base64Image}\", {\"Base64\", \"${imagePayload.format}\"}]]`;
-  }
-
-  if (options.dryRun) {
-    console.log('Dry run: no request was sent.');
-    console.log(JSON.stringify({
-      endpoint: DEFAULT_ENDPOINT,
-      appIdPresent: Boolean(appId),
-      query: wolframQuery,
-      mode: usingRemoteUrl ? 'url' : 'file',
-      source: sourceSummary
-    }, null, 2));
-    process.exit(0);
-  }
-
-  let response;
-
-  if (usingRemoteUrl) {
-    const params = new URLSearchParams({
-      appid: appId,
-      input: wolframQuery,
-      output: 'JSON',
-      format: 'plaintext'
-    });
-    response = await fetch(`${DEFAULT_ENDPOINT}?${params.toString()}`);
-  } else {
-    const bodyParams = new URLSearchParams({
-      input: wolframQuery,
-      output: 'JSON',
-      format: 'plaintext'
-    });
-
-    response = await fetch(`${DEFAULT_ENDPOINT}?appid=${encodeURIComponent(appId)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: bodyParams.toString()
-    });
-
-    if (response.status === 404) {
-      const combinedParams = new URLSearchParams({
-        appid: appId,
-        input: wolframQuery,
-        output: 'JSON',
-        format: 'plaintext'
-      });
-
-      response = await fetch(`${DEFAULT_ENDPOINT}?${combinedParams.toString()}`);
-    }
-  }
-
-  if (!response.ok) {
-    const text = await response.text();
-    console.error(`Wolfram API request failed with status ${response.status}: ${response.statusText}`);
-    console.error(text);
-    process.exit(1);
-  }
-
-  const payload = await response.json();
-  const { queryresult } = payload;
-
-  
-
-  if (!queryresult?.success) {
-    const messages = [
-      'Wolfram reported failure evaluating the query.',
-      queryresult?.error?.msg,
-      queryresult?.tips?.map((tip) => tip.text).join('\n')
-    ].filter(Boolean);
-
-    console.error(messages.join('\n'));
-    if (options.raw) {
-      console.log(JSON.stringify(payload, null, 2));
-    }
-    process.exit(1);
-  }
-
-  const candidates = extractCandidates(queryresult, options.top);
-  const output = {
-    source: sourceSummary,
-    imageUrl: options.url ?? null,
-    imageBytes: imagePayload?.optimizedBytes ?? null,
-    originalBytes: imagePayload?.originalBytes ?? null,
-    resizeTarget: usingRemoteUrl ? null : MAX_DIMENSION,
-    candidates,
-    metadata: {
-      wolframSource: 'ImageIdentify',
-      timedOut: queryresult?.timedout ?? [],
-      assumptions: queryresult?.assumptions ?? null,
-      evaluatedAt: new Date().toISOString()
-    }
-  };
-
-  if (options.raw) {
-    console.log('\n--- Raw Wolfram Response ---');
-    console.log(JSON.stringify(payload, null, 2));
-    console.log('--- End Raw Response ---\n');
-  }
-
-  console.log(JSON.stringify(output, null, 2));
 }
 
-run().catch((error) => {
-  console.error('Unexpected error while calling Wolfram API:');
-  console.error(error);
-  process.exit(1);
-});
+
+async function main() {
+  try {
+    console.log('🚀 Starting clothing analysis pipeline...\n');
+    console.log('📸 Input image:', IMAGE_PATH, '\n');
+    console.log('─'.repeat(50), '\n');
+    
+    // // Step 1: Remove background
+    // const processedImagePath = await removeBackground(IMAGE_PATH);
+    
+    // console.log('─'.repeat(50), '\n');
+    
+    // // Step 2: Identify the clothing item
+    // const bestMatch = await identifyImage(processedImagePath);
+    
+    console.log('\n' + '─'.repeat(50), '\n');
+    
+    // Step 3: Analyze colors
+    const colorData = await analyzeColors(IMAGE_PATH);
+    
+    console.log('\n' + '─'.repeat(50));
+    console.log('\n✨ Pipeline complete!');
+    console.log(`📁 Processed image: ${processedImagePath}`);
+    console.log(`🏷️  Type: ${bestMatch}`);
+    console.log(`🎨 Primary Color: ${colorData.dominantColor}`);
+    
+  } catch (error) {
+    console.error('\n❌ Error in pipeline:', error.message);
+    process.exit(1);
+  }
+}
+
+main().catch(console.error);

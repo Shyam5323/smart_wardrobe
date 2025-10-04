@@ -97,10 +97,31 @@ export const fetchCurrentUser = () =>
     auth: true,
   });
 
-export const fetchWardrobeItems = () =>
-  apiFetch<{ items: ClothingItemResponse[] }>('/api/items', {
-    auth: true,
-  });
+export type AiCategory = {
+  label: string;
+  confidence?: number;
+};
+
+export type AiColor = {
+  name: string;
+  hex?: string;
+  rgb?: {
+    r: number;
+    g: number;
+    b: number;
+  };
+};
+
+export type AiTags = {
+  status: 'idle' | 'processing' | 'complete' | 'failed';
+  source?: string;
+  analyzedAt?: string;
+  primaryCategory?: string;
+  categories?: AiCategory[];
+  dominantColor?: string;
+  colors?: AiColor[];
+  error?: string;
+};
 
 export type ClothingItemResponse = {
   _id: string;
@@ -113,7 +134,25 @@ export type ClothingItemResponse = {
   color?: string;
   isFavorite?: boolean;
   updatedAt?: string;
+  aiTags?: AiTags | null;
 };
+
+export const fetchWardrobeItems = () =>
+  apiFetch<{ items: ClothingItemResponse[] }>('/api/items', {
+    auth: true,
+  });
+
+export type AnalyzeItemResponse = {
+  aiTags: AiTags;
+  item?: ClothingItemResponse;
+};
+
+export const analyzeWardrobeItem = (payload: { itemId?: string; imageUrl?: string }) =>
+  apiFetch<AnalyzeItemResponse>('/api/ai/analyze-item', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    auth: true,
+  });
 
 export const uploadWardrobeItem = (formData: FormData) =>
   apiFetch<{ item: ClothingItemResponse }>('/api/items/upload', {

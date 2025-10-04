@@ -12,6 +12,12 @@ export type ItemDetailSheetProps = {
   isSaving: boolean;
   isDeleting: boolean;
   error: string | null;
+  aiState?: {
+    isAnalyzing: boolean;
+    error?: string | null;
+    onRetry?: () => Promise<void> | void;
+    onClearError?: () => void;
+  };
   onClose: () => void;
   onSave: (payload: UpdateClothingItemPayload) => Promise<void> | void;
   onDelete: () => Promise<void> | void;
@@ -26,6 +32,7 @@ export const ItemDetailSheet = ({
   isSaving,
   isDeleting,
   error,
+  aiState,
   onClose,
   onSave,
   onDelete,
@@ -36,6 +43,13 @@ export const ItemDetailSheet = ({
   const [notes, setNotes] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const aiTags = item?.aiTags ?? null;
+  const aiStatus = aiTags?.status ?? (aiState?.isAnalyzing ? 'processing' : 'idle');
+  const isAiProcessing = aiStatus === 'processing';
+  const aiErrorMessage = aiState?.error ?? aiTags?.error ?? null;
+  const topCategories = (aiTags?.categories ?? []).filter((entry) => entry.label).slice(0, 3);
+  const dominantColorSample = aiTags?.colors?.[0];
+  const analyzedAtLabel = aiTags?.analyzedAt ? new Date(aiTags.analyzedAt).toLocaleString() : null;
 
   useEffect(() => {
     if (!item) {
@@ -142,6 +156,115 @@ export const ItemDetailSheet = ({
                 <p className="text-xs text-slate-500">
                   Added {new Date(item.uploadedAt).toLocaleString()}
                 </p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
+                  AI insights
+                </span>
+                {isAiProcessing && (
+                  <span className="flex items-center gap-2 text-xs text-indigo-300">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-indigo-400" />
+                    Analyzing…
+                  </span>
+                )}
+              </div>
+
+              {aiErrorMessage && !isAiProcessing ? (
+                <div className="mt-3 space-y-3 text-rose-300">
+                  <p>{aiErrorMessage}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {aiState?.onRetry && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!aiState.onRetry) return;
+                          Promise.resolve(aiState.onRetry()).catch(() => undefined);
+                        }}
+                        className="rounded-full bg-rose-500/20 px-3 py-1 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/30"
+                      >
+                        Retry analysis
+                      </button>
+                    )}
+                    {aiState?.onClearError && (
+                      <button
+                        type="button"
+                        onClick={aiState.onClearError}
+                        className="rounded-full border border-rose-500/40 px-3 py-1 text-xs font-semibold text-rose-200 transition hover:border-rose-300 hover:text-rose-100"
+                      >
+                        Dismiss
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : aiStatus === 'complete' && aiTags ? (
+                <div className="mt-3 space-y-4 text-sm text-slate-200">
+                  {aiTags.primaryCategory && (
+                    <div className="space-y-2">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Suggested category</p>
+                      <p className="text-sm font-medium text-slate-100">{aiTags.primaryCategory}</p>
+                      {topCategories.length > 0 && (
+                        <ul className="space-y-1 text-xs text-slate-400">
+                          {topCategories.map((entry) => (
+                            <li key={entry.label} className="flex items-center justify-between">
+                              <span>{entry.label}</span>
+                              {typeof entry.confidence === 'number' && (
+                                <span>{Math.round(entry.confidence * 100)}%</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  {aiTags.dominantColor && (
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="h-10 w-10 rounded-full border border-slate-700"
+                        style={{ backgroundColor: dominantColorSample?.hex }}
+                      />
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Dominant color</p>
+                        <p className="text-sm font-medium text-slate-100">{aiTags.dominantColor}</p>
+                        {dominantColorSample?.hex && (
+                          <p className="text-xs text-slate-500">{dominantColorSample.hex}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {(analyzedAtLabel || aiTags.source) && (
+                    <p className="text-xs text-slate-500">
+                      {analyzedAtLabel ? `Updated ${analyzedAtLabel}` : 'Updated recently'}
+                      {aiTags.source ? ` via ${aiTags.source}` : ''}
+                    </p>
+                  )}
+
+                  {aiState?.onRetry && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!aiState.onRetry || isAiProcessing) return;
+                        Promise.resolve(aiState.onRetry()).catch(() => undefined);
+                      }}
+                      disabled={isAiProcessing}
+                      className="rounded-full border border-indigo-500/40 px-3 py-1 text-xs font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Re-run analysis
+                    </button>
+                  )}
+                </div>
+              ) : aiStatus === 'processing' ? (
+                <p className="mt-3 text-xs text-indigo-200">AI is analyzing this item. Hang tight!</p>
+              ) : aiStatus === 'failed' ? (
+                <p className="mt-3 text-xs text-rose-300">
+                  AI analysis could not complete. {aiState?.onRetry ? 'Try running it again.' : ''}
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-slate-500">AI tags will appear here after analysis.</p>
               )}
             </div>
 

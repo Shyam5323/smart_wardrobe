@@ -2,26 +2,63 @@ const path = require('path');
 const fs = require('fs/promises');
 
 const { ClothingItem } = require('../models');
-
-const buildPublicUrl = (req, filePath) => {
-  if (!filePath) return null;
-  const normalizedPath = filePath.replace(/\\/g, '/');
-
-  if (normalizedPath.startsWith('http')) {
-    return normalizedPath;
-  }
-
-  const host = req.get('host');
-  const protocol = req.protocol;
-  return `${protocol}://${host}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
-};
+const { analyzeItemFromPath } = require('../services/wolfram');
+const { formatItemForResponse } = require('../utils/itemResponse');
 
 const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
 
-const formatItem = (req, itemDoc) => {
-  const item = itemDoc.toObject({ versionKey: false });
-  item.imageUrl = buildPublicUrl(req, item.imageUrl);
-  return item;
+const storeAiSuccess = async (itemId, aiTags) => {
+  try {
+    const item = await ClothingItem.findById(itemId);
+    if (!item) {
+      return;
+    }
+
+    item.aiTags = aiTags;
+
+    if (!item.category && aiTags?.primaryCategory) {
+      item.category = aiTags.primaryCategory;
+    }
+
+    if (!item.color && aiTags?.dominantColor) {
+      item.color = aiTags.dominantColor;
+    }
+
+    await item.save();
+  } catch (error) {
+    console.error('Failed to persist AI analysis results:', error);
+  }
+};
+
+const storeAiFailure = async (itemId, error) => {
+  try {
+    const message = error instanceof Error ? error.message : String(error || 'Unknown AI failure');
+    await ClothingItem.findByIdAndUpdate(itemId, {
+      aiTags: {
+        status: 'failed',
+        source: 'wolfram',
+        analyzedAt: new Date(),
+        error: message,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to persist AI analysis failure:', err);
+  }
+};
+
+const scheduleAiAnalysis = (itemId, fileName) => {
+  if (!itemId || !fileName) {
+    return;
+  }
+
+  const imagePath = path.join(uploadsDir, fileName);
+
+  analyzeItemFromPath(imagePath)
+    .then((aiTags) => storeAiSuccess(itemId, aiTags))
+    .catch((error) => {
+      console.error('AI analysis failed:', error);
+      return storeAiFailure(itemId, error);
+    });
 };
 
 const normalizeInputString = (value) => {
@@ -83,6 +120,7 @@ exports.uploadItem = async (req, res, next) => {
       imageUrl: `/uploads/${req.file.filename}`,
       fileSize: req.file.size,
       contentType: req.file.mimetype,
+      aiTags: { status: 'processing', source: 'wolfram' },
     };
 
     applyStringField(payload, 'notes', req.body?.notes);
@@ -94,7 +132,11 @@ exports.uploadItem = async (req, res, next) => {
     const item = await ClothingItem.create(payload);
 
     res.status(201).json({
-      item: formatItem(req, item),
+      item: formatItemForResponse(req, item),
+    });
+
+    setImmediate(() => {
+      scheduleAiAnalysis(item._id, item.fileName);
     });
   } catch (error) {
     next(error);
@@ -113,7 +155,7 @@ exports.listItems = async (req, res, next) => {
     }).sort({ uploadedAt: -1 });
 
     res.json({
-      items: items.map((item) => formatItem(req, item)),
+      items: items.map((item) => formatItemForResponse(req, item)),
     });
   } catch (error) {
     next(error);
@@ -132,7 +174,7 @@ exports.getItem = async (req, res, next) => {
       return res.status(404).json({ message: 'Item not found.' });
     }
 
-    res.json({ item: formatItem(req, item) });
+    res.json({ item: formatItemForResponse(req, item) });
   } catch (error) {
     next(error);
   }
@@ -158,7 +200,7 @@ exports.updateItem = async (req, res, next) => {
 
     await item.save();
 
-    res.json({ item: formatItem(req, item) });
+    res.json({ item: formatItemForResponse(req, item) });
   } catch (error) {
     next(error);
   }

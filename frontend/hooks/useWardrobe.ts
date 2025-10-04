@@ -11,6 +11,7 @@ import {
   fetchWardrobeItems,
   updateWardrobeItem,
   uploadWardrobeItem,
+  analyzeWardrobeItem,
 } from '@/lib/api';
 import { useAuth } from '@/components/providers/AuthProvider';
 
@@ -25,6 +26,10 @@ export type UseWardrobeResult = {
   update: (id: string, payload: UpdateClothingItemPayload) => Promise<ClothingItemResponse>;
   remove: (id: string) => Promise<void>;
   clearError: () => void;
+  analyze: (itemId: string) => Promise<ClothingItemResponse>;
+  analyzingItemIds: string[];
+  analysisErrors: Record<string, string>;
+  clearAnalysisError: (itemId: string) => void;
 };
 
 export const useWardrobe = (): UseWardrobeResult => {
@@ -33,6 +38,8 @@ export const useWardrobe = (): UseWardrobeResult => {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [analyzingItemIds, setAnalyzingItemIds] = useState<string[]>([]);
+  const [analysisErrors, setAnalysisErrors] = useState<Record<string, string>>({});
 
   const refresh = useCallback(async () => {
     if (status !== 'authenticated') {
@@ -67,6 +74,107 @@ export const useWardrobe = (): UseWardrobeResult => {
     }
   }, [refresh, status]);
 
+  const analyze = useCallback(async (itemId: string) => {
+    setAnalyzingItemIds((prev) => (prev.includes(itemId) ? prev : [...prev, itemId]));
+    setAnalysisErrors((prev) => {
+      if (!(itemId in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+
+    try {
+      const response = await analyzeWardrobeItem({ itemId });
+      let updatedItem = response.item;
+
+      if (!updatedItem) {
+        const fetched = await fetchWardrobeItem(itemId);
+        updatedItem = fetched.item;
+      } else if (!updatedItem.aiTags && response.aiTags) {
+        updatedItem = { ...updatedItem, aiTags: response.aiTags };
+      }
+
+      if (!updatedItem) {
+        throw new Error('AI analysis completed but item data could not be retrieved.');
+      }
+
+      setItems((prev) => {
+        const exists = prev.some((existing) => existing._id === updatedItem._id);
+        if (exists) {
+          return prev.map((existing) => (existing._id === updatedItem._id ? updatedItem : existing));
+        }
+        return [updatedItem, ...prev];
+      });
+
+      return updatedItem;
+    } catch (err) {
+      let message = 'AI analysis failed.';
+      if (err instanceof ApiError) {
+        message = err.message;
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      setAnalysisErrors((prev) => ({ ...prev, [itemId]: message }));
+      throw err;
+    } finally {
+      setAnalyzingItemIds((prev) => prev.filter((existing) => existing !== itemId));
+    }
+  }, []);
+
+  const clearAnalysisError = useCallback((itemId: string) => {
+    setAnalysisErrors((prev) => {
+      if (!(itemId in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+  }, []);
+
+  const pollAiCompletion = useCallback(
+    async (itemId: string) => {
+      const maxAttempts = 8;
+      const delayMs = 2000;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+        try {
+          const { item } = await fetchWardrobeItem(itemId);
+          setItems((prev) => {
+            const exists = prev.some((existing) => existing._id === item._id);
+            if (exists) {
+              return prev.map((existing) => (existing._id === item._id ? item : existing));
+            }
+            return [item, ...prev];
+          });
+
+          if (item.aiTags?.status && item.aiTags.status !== 'processing') {
+            setAnalysisErrors((prev) => {
+              const next = { ...prev };
+              if (item.aiTags?.status === 'failed' && item.aiTags.error) {
+                next[itemId] = item.aiTags.error;
+              } else {
+                delete next[itemId];
+              }
+              return next;
+            });
+            break;
+          }
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 404) {
+            break;
+          }
+          throw err;
+        }
+      }
+    },
+    [setItems, setAnalysisErrors]
+  );
+
   const upload = useCallback(
     async ({ file, notes }: { file: File; notes?: string }) => {
       if (status !== 'authenticated') {
@@ -86,6 +194,32 @@ export const useWardrobe = (): UseWardrobeResult => {
 
         const { item } = await uploadWardrobeItem(formData);
         setItems((prev) => [item, ...prev]);
+
+        if (item._id && (!item.aiTags || item.aiTags.status === 'processing')) {
+          setAnalyzingItemIds((prev) => (prev.includes(item._id) ? prev : [...prev, item._id]));
+          setAnalysisErrors((prev) => {
+            if (!(item._id in prev)) {
+              return prev;
+            }
+            const next = { ...prev };
+            delete next[item._id];
+            return next;
+          });
+
+          pollAiCompletion(item._id)
+            .catch((err) => {
+              let message = 'AI analysis failed.';
+              if (err instanceof ApiError) {
+                message = err.message;
+              } else if (err instanceof Error) {
+                message = err.message;
+              }
+              setAnalysisErrors((prev) => ({ ...prev, [item._id]: message }));
+            })
+            .finally(() => {
+              setAnalyzingItemIds((prev) => prev.filter((existing) => existing !== item._id));
+            });
+        }
       } catch (err) {
         if (err instanceof ApiError) {
           setError(err.message);
@@ -99,7 +233,7 @@ export const useWardrobe = (): UseWardrobeResult => {
         setIsUploading(false);
       }
     },
-    [status]
+    [pollAiCompletion, status]
   );
 
   const clearError = useCallback(() => setError(null), []);
@@ -125,7 +259,31 @@ export const useWardrobe = (): UseWardrobeResult => {
   const remove = useCallback(async (id: string) => {
     await deleteWardrobeItem(id);
     setItems((prev) => prev.filter((existing) => existing._id !== id));
+    setAnalyzingItemIds((prev) => prev.filter((existing) => existing !== id));
+    setAnalysisErrors((prev) => {
+      if (!(id in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }, []);
 
-  return { items, isLoading, isUploading, error, upload, refresh, fetchById, update, remove, clearError };
+  return {
+    items,
+    isLoading,
+    isUploading,
+    error,
+    upload,
+    refresh,
+    fetchById,
+    update,
+    remove,
+    clearError,
+    analyze,
+    analyzingItemIds,
+    analysisErrors,
+    clearAnalysisError,
+  };
 };

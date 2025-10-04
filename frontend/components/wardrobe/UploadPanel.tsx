@@ -59,7 +59,8 @@ export const UploadPanel = ({ onUpload, isUploading, error, onErrorClear }: Uplo
     // ... (This is your friend's original handleSubmit logic)
     try {
       await onUpload({ file, notes });
-      setSuccessMessage('Item uploaded successfully!');
+      setSuccessMessage('Item uploaded! AI is analyzing it now.');
+      setFormError(null);
       setFile(null);
       setNotes('');
       setPreviewUrl(null);
