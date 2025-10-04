@@ -90,56 +90,89 @@ export const WardrobeGrid = ({
                 </p>
 
                 {/* --- Wear stats section --- */}
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-                  <div className="flex items-center gap-1">
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                  <span className="flex items-center gap-1">
                     <Repeat size={14} />
-                    <span>Worn {Math.floor(Math.random() * 20)} times</span>
-                  </div>
-                  <div className="flex items-center gap-1 font-medium text-emerald-400">
-                    <IndianRupee size={14} />
-                    <span>{Math.floor(Math.random() * 50 + 10)} / wear</span>
-                  </div>
+                    {(() => {
+                      const timesWorn = item.timesWorn ?? 0;
+                      if (!timesWorn) {
+                        return <span>Not worn yet</span>;
+                      }
+                      return <span>Worn {timesWorn} {timesWorn === 1 ? 'time' : 'times'}</span>;
+                    })()}
+                  </span>
+                  {typeof item.purchasePrice === 'number' && Number.isFinite(item.purchasePrice) && (
+                    <span className="flex items-center gap-1 text-slate-300">
+                      <IndianRupee size={14} />
+                      <span>{item.purchasePrice.toFixed(2)}</span>
+                    </span>
+                  )}
+                  {typeof item.costPerWear === 'number' && Number.isFinite(item.costPerWear) && (
+                    <span className="flex items-center gap-1 font-medium text-emerald-400">
+                      <IndianRupee size={14} />
+                      <span>{item.costPerWear.toFixed(2)} / wear</span>
+                    </span>
+                  )}
                 </div>
 
                 {/* --- AI Tagging / Analysis section --- */}
-                {(
-                  analyzingSet.has(item._id) ||
-                  item.aiTags?.status ||
-                  analysisErrors[item._id]
-                ) && (
+                {(() => {
+                  const displayCategory = item.userTags?.primaryCategory ?? item.aiTags?.primaryCategory;
+                  const displayColor = item.userTags?.dominantColor ?? item.aiTags?.dominantColor;
+                  const isManualCategory = Boolean(item.userTags?.primaryCategory);
+                  const isManualColor = Boolean(item.userTags?.dominantColor);
+                  const isProcessing = analyzingSet.has(item._id) || item.aiTags?.status === 'processing';
+                  const isFailed = item.aiTags?.status === 'failed' || analysisErrors[item._id];
+
+                  if (!isProcessing && !displayCategory && !displayColor && !isFailed) {
+                    return null;
+                  }
+
+                  return (
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                    {analyzingSet.has(item._id) || item.aiTags?.status === 'processing' ? (
+                      {isProcessing ? (
                       <span className="flex items-center gap-2 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-indigo-200">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
                         AI tagging…
                       </span>
                     ) : (
-                      item.aiTags?.status === 'complete' && item.aiTags.primaryCategory && (
+                        displayCategory && (
                         <span className="rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-indigo-200">
-                          {item.aiTags.primaryCategory}
+                            {displayCategory}
+                            {isManualCategory && (
+                              <span className="ml-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-200">
+                                Manual
+                              </span>
+                            )}
                         </span>
                       )
                     )}
 
-                    {!analyzingSet.has(item._id) && item.aiTags?.status === 'complete' && item.aiTags.dominantColor && (
+                      {!isProcessing && displayColor && (
                       <span className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-2 py-0.5 text-slate-300">
-                        {item.aiTags.colors?.[0]?.hex && (
+                          {item.aiTags?.colors?.[0]?.hex && !isManualColor && (
                           <span
                             className="h-2.5 w-2.5 rounded-full border border-slate-700"
                             style={{ backgroundColor: item.aiTags.colors?.[0]?.hex }}
                           />
                         )}
-                        {item.aiTags.dominantColor}
+                          {displayColor}
+                          {isManualColor && (
+                            <span className="ml-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-200">
+                              Manual
+                            </span>
+                          )}
                       </span>
                     )}
 
-                    {!analyzingSet.has(item._id) && (item.aiTags?.status === 'failed' || analysisErrors[item._id]) && (
+                      {!isProcessing && isFailed && (
                       <span className="rounded-full border border-rose-500/60 bg-rose-500/10 px-2 py-0.5 text-rose-300">
                         AI failed
                       </span>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                 {item.uploadedAt && (
                   <p className="text-xs text-slate-500 mt-1">

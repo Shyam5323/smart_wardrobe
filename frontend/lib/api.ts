@@ -123,6 +123,12 @@ export type AiTags = {
   error?: string;
 };
 
+export type UserTags = {
+  primaryCategory?: string | null;
+  dominantColor?: string | null;
+  updatedAt?: string;
+};
+
 export type ClothingItemResponse = {
   _id: string;
   imageUrl: string | null;
@@ -135,6 +141,10 @@ export type ClothingItemResponse = {
   isFavorite?: boolean;
   updatedAt?: string;
   aiTags?: AiTags | null;
+  userTags?: UserTags | null;
+  purchasePrice?: number;
+  timesWorn?: number;
+  costPerWear?: number | null;
 };
 
 export const fetchWardrobeItems = () =>
@@ -173,6 +183,7 @@ export type UpdateClothingItemPayload = {
   color?: string | null;
   notes?: string | null;
   isFavorite?: boolean;
+  purchasePrice?: number | null;
 };
 
 export const updateWardrobeItem = (id: string, payload: UpdateClothingItemPayload) =>
@@ -187,4 +198,24 @@ export const deleteWardrobeItem = (id: string) =>
     method: 'DELETE',
     auth: true,
     parseJson: false,
+  });
+
+export const updateWardrobeItemTags = (
+  id: string,
+  payload: { primaryCategory?: string | null; dominantColor?: string | null }
+) =>
+  apiFetch<{ item: ClothingItemResponse }>(`/api/items/${id}/tags`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+    auth: true,
+  });
+
+export const markWardrobeItemWorn = (
+  id: string,
+  payload: { count?: number } = {}
+) =>
+  apiFetch<{ item: ClothingItemResponse }>(`/api/items/${id}/wear`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    auth: true,
   });

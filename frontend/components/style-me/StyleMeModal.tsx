@@ -70,7 +70,7 @@ export default function StyleMeModal({ isOpen, onClose }: StyleMeModalProps) {
 
         {step === 'selecting' && (
           <div>
-            <h2 className="text-2xl font-bold text-center">What's the occasion?</h2>
+            <h2 className="text-2xl font-bold text-center">What&apos;s the occasion?</h2>
             <div className="mt-6 grid grid-cols-3 gap-4">
               {occasions.map((occasion) => (
                 <button
@@ -88,14 +88,14 @@ export default function StyleMeModal({ isOpen, onClose }: StyleMeModalProps) {
 
         {step === 'loading' && (
           <div className="flex flex-col items-center justify-center h-48">
-            <p className="text-indigo-400">Styling your look for "{selectedOccasion}"...</p>
+            <p className="text-indigo-400">Styling your look for “{selectedOccasion}”...</p>
           </div>
         )}
 
         {step === 'result' && selectedOccasion && (
           <div>
             <h2 className="text-2xl font-bold text-center">Your {selectedOccasion} Look!</h2>
-            <p className="text-center text-slate-400 text-sm mt-1">Recommended for today's sunny weather.</p>
+            <p className="text-center text-slate-400 text-sm mt-1">Recommended for today&apos;s sunny weather.</p>
             
             {/* 5. Update the JSX to display the correct image dynamically */}
             <div className="mt-6 relative h-80 rounded-lg bg-slate-800/50 flex items-center justify-center overflow-hidden">

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, DragEvent, ChangeEvent, FormEvent, useEffect } from 'react';
+import { useState, DragEvent, FormEvent, useEffect } from 'react';
 import { UploadCloud } from 'lucide-react';
+import Image from 'next/image';
 
 // Re-using the props from your friend's original code
 export type UploadPanelProps = {
-  onUpload: (input: { file: File; notes?: string }) => Promise<void>;
+  onUpload: (input: { file: File; notes?: string; purchasePrice?: number | null }) => Promise<void>;
   isUploading: boolean;
   error: string | null;
   onErrorClear: () => void;
@@ -14,6 +15,7 @@ export type UploadPanelProps = {
 export const UploadPanel = ({ onUpload, isUploading, error, onErrorClear }: UploadPanelProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [notes, setNotes] = useState('');
+  const [purchasePrice, setPurchasePrice] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -56,13 +58,28 @@ export const UploadPanel = ({ onUpload, isUploading, error, onErrorClear }: Uplo
       setFormError('Please choose an image to upload.');
       return;
     }
+
+    const normalizedPrice = purchasePrice.trim();
+    if (normalizedPrice) {
+      const numeric = Number.parseFloat(normalizedPrice);
+      if (!Number.isFinite(numeric) || Number.isNaN(numeric) || numeric < 0) {
+        setFormError('Purchase price must be a non-negative number.');
+        return;
+      }
+    }
+
     // ... (This is your friend's original handleSubmit logic)
     try {
-      await onUpload({ file, notes });
+      await onUpload({
+        file,
+        notes,
+        purchasePrice: normalizedPrice ? Math.round(Number.parseFloat(normalizedPrice) * 100) / 100 : null,
+      });
       setSuccessMessage('Item uploaded! AI is analyzing it now.');
       setFormError(null);
       setFile(null);
       setNotes('');
+      setPurchasePrice('');
       setPreviewUrl(null);
     } catch {
       // Error is handled by the parent hook
@@ -95,8 +112,15 @@ export const UploadPanel = ({ onUpload, isUploading, error, onErrorClear }: Uplo
         
         {/* This is the corrected preview logic */}
         {previewUrl && (
-          <div className="mt-4 overflow-hidden rounded-xl border border-slate-800">
-            <img src={previewUrl} alt="Preview" className="h-48 w-full object-cover" />
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-800 relative h-48">
+            <Image
+              src={previewUrl}
+              alt="Preview"
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 300px"
+              unoptimized
+            />
           </div>
         )}
       </div>
@@ -111,6 +135,22 @@ export const UploadPanel = ({ onUpload, isUploading, error, onErrorClear }: Uplo
           onChange={(event) => setNotes(event.target.value)}
           placeholder="e.g. Vintage denim jacket"
           rows={3}
+          className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="purchasePrice" className="block text-sm font-medium text-slate-300">
+          Purchase price (optional)
+        </label>
+        <input
+          id="purchasePrice"
+          type="number"
+          min="0"
+          step="0.01"
+          value={purchasePrice}
+          onChange={(event) => setPurchasePrice(event.target.value)}
+          placeholder="e.g. 49.99"
           className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
         />
       </div>

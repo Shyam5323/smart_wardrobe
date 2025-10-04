@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 
 import type { ClothingItemResponse, UpdateClothingItemPayload } from '@/lib/api';
+import { CATEGORY_OPTIONS, COLOR_OPTIONS } from '@/lib/constants';
 
 export type ItemDetailSheetProps = {
   item: ClothingItemResponse | null;
@@ -18,6 +19,8 @@ export type ItemDetailSheetProps = {
     onRetry?: () => Promise<void> | void;
     onClearError?: () => void;
   };
+  onUpdateTags?: (payload: { primaryCategory?: string | null; dominantColor?: string | null }) => Promise<void> | void;
+  isUpdatingTags?: boolean;
   onClose: () => void;
   onSave: (payload: UpdateClothingItemPayload) => Promise<void> | void;
   onDelete: () => Promise<void> | void;
@@ -33,6 +36,8 @@ export const ItemDetailSheet = ({
   isDeleting,
   error,
   aiState,
+  onUpdateTags,
+  isUpdatingTags = false,
   onClose,
   onSave,
   onDelete,
@@ -43,6 +48,8 @@ export const ItemDetailSheet = ({
   const [notes, setNotes] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [overrideCategory, setOverrideCategory] = useState('');
+  const [overrideColor, setOverrideColor] = useState('');
   const aiTags = item?.aiTags ?? null;
   const aiStatus = aiTags?.status ?? (aiState?.isAnalyzing ? 'processing' : 'idle');
   const isAiProcessing = aiStatus === 'processing';
@@ -50,6 +57,10 @@ export const ItemDetailSheet = ({
   const topCategories = (aiTags?.categories ?? []).filter((entry) => entry.label).slice(0, 3);
   const dominantColorSample = aiTags?.colors?.[0];
   const analyzedAtLabel = aiTags?.analyzedAt ? new Date(aiTags.analyzedAt).toLocaleString() : null;
+  const manualTags = item?.userTags ?? null;
+  const manualUpdatedAtLabel = manualTags?.updatedAt ? new Date(manualTags.updatedAt).toLocaleString() : null;
+  const effectiveCategory = manualTags?.primaryCategory || aiTags?.primaryCategory;
+  const effectiveColor = manualTags?.dominantColor || aiTags?.dominantColor;
 
   useEffect(() => {
     if (!item) {
@@ -66,6 +77,8 @@ export const ItemDetailSheet = ({
     setColor(item.color ?? '');
     setNotes(item.notes ?? '');
     setIsFavorite(Boolean(item.isFavorite));
+    setOverrideCategory(item.userTags?.primaryCategory ?? '');
+    setOverrideColor(item.userTags?.dominantColor ?? '');
   }, [item]);
 
   useEffect(() => {
@@ -201,9 +214,30 @@ export const ItemDetailSheet = ({
                 </div>
               ) : aiStatus === 'complete' && aiTags ? (
                 <div className="mt-3 space-y-4 text-sm text-slate-200">
+                  {(effectiveCategory || effectiveColor) && (
+                    <div className="space-y-2">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Active tags</p>
+                      {effectiveCategory && (
+                        <p className="text-sm font-medium text-slate-100">
+                          Category: {effectiveCategory}
+                          {manualTags?.primaryCategory && <span className="ml-2 rounded-full border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200">Manual</span>}
+                        </p>
+                      )}
+                      {effectiveColor && (
+                        <p className="text-sm font-medium text-slate-100">
+                          Color: {effectiveColor}
+                          {manualTags?.dominantColor && <span className="ml-2 rounded-full border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200">Manual</span>}
+                        </p>
+                      )}
+                      {manualUpdatedAtLabel && (
+                        <p className="text-xs text-emerald-200/90">Manually adjusted {manualUpdatedAtLabel}</p>
+                      )}
+                    </div>
+                  )}
+
                   {aiTags.primaryCategory && (
                     <div className="space-y-2">
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Suggested category</p>
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">AI suggested category</p>
                       <p className="text-sm font-medium text-slate-100">{aiTags.primaryCategory}</p>
                       {topCategories.length > 0 && (
                         <ul className="space-y-1 text-xs text-slate-400">
@@ -227,7 +261,7 @@ export const ItemDetailSheet = ({
                         style={{ backgroundColor: dominantColorSample?.hex }}
                       />
                       <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Dominant color</p>
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">AI dominant color</p>
                         <p className="text-sm font-medium text-slate-100">{aiTags.dominantColor}</p>
                         {dominantColorSample?.hex && (
                           <p className="text-xs text-slate-500">{dominantColorSample.hex}</p>
@@ -265,6 +299,112 @@ export const ItemDetailSheet = ({
                 </p>
               ) : (
                 <p className="mt-3 text-xs text-slate-500">AI tags will appear here after analysis.</p>
+              )}
+
+              {onUpdateTags && (
+                <form
+                  className="mt-4 space-y-4 rounded-lg border border-slate-800 bg-slate-950/80 p-4"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    if (!item) return;
+                    setLocalError(null);
+                    try {
+                      await onUpdateTags({
+                        primaryCategory: overrideCategory.trim() === '' ? null : overrideCategory,
+                        dominantColor: overrideColor.trim() === '' ? null : overrideColor,
+                      });
+                    } catch (err) {
+                      if (err instanceof Error) {
+                        setLocalError(err.message);
+                      } else {
+                        setLocalError('Unable to update tags.');
+                      }
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Manual override
+                    </p>
+                    {manualTags && (manualTags.primaryCategory || manualTags.dominantColor) ? (
+                      <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-0.5 text-[11px] text-emerald-200">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">Optional</span>
+                    )}
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1 text-xs">
+                      <span className="block uppercase tracking-[0.2em] text-slate-500">Category</span>
+                      <select
+                        value={overrideCategory}
+                        onChange={(event) => setOverrideCategory(event.target.value)}
+                        className="w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                        disabled={isUpdatingTags || isLoading}
+                      >
+                        <option value="">Use AI suggestion</option>
+                        {CATEGORY_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 text-xs">
+                      <span className="block uppercase tracking-[0.2em] text-slate-500">Color</span>
+                      <select
+                        value={overrideColor}
+                        onChange={(event) => setOverrideColor(event.target.value)}
+                        className="w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                        disabled={isUpdatingTags || isLoading}
+                      >
+                        <option value="">Use AI suggestion</option>
+                        {COLOR_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="submit"
+                      className="rounded-full bg-indigo-500/90 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isUpdatingTags || isLoading}
+                    >
+                      {isUpdatingTags ? 'Saving…' : 'Save override'}
+                    </button>
+                    {(manualTags?.primaryCategory || manualTags?.dominantColor) && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!onUpdateTags || !item) return;
+                          setLocalError(null);
+                          setOverrideCategory('');
+                          setOverrideColor('');
+                          try {
+                            await onUpdateTags({ primaryCategory: null, dominantColor: null });
+                          } catch (err) {
+                            if (err instanceof Error) {
+                              setLocalError(err.message);
+                            } else {
+                              setLocalError('Unable to clear overrides.');
+                            }
+                          }
+                        }}
+                        disabled={isUpdatingTags || isLoading}
+                        className="rounded-full border border-slate-700 px-4 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Clear override
+                      </button>
+                    )}
+                  </div>
+                </form>
               )}
             </div>
 

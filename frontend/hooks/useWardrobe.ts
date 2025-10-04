@@ -12,6 +12,7 @@ import {
   updateWardrobeItem,
   uploadWardrobeItem,
   analyzeWardrobeItem,
+  updateWardrobeItemTags,
 } from '@/lib/api';
 import { useAuth } from '@/components/providers/AuthProvider';
 
@@ -20,7 +21,7 @@ export type UseWardrobeResult = {
   isLoading: boolean;
   isUploading: boolean;
   error: string | null;
-  upload: (input: { file: File; notes?: string }) => Promise<void>;
+  upload: (input: { file: File; notes?: string; purchasePrice?: number | null }) => Promise<void>;
   refresh: () => Promise<void>;
   fetchById: (id: string) => Promise<ClothingItemResponse>;
   update: (id: string, payload: UpdateClothingItemPayload) => Promise<ClothingItemResponse>;
@@ -30,6 +31,8 @@ export type UseWardrobeResult = {
   analyzingItemIds: string[];
   analysisErrors: Record<string, string>;
   clearAnalysisError: (itemId: string) => void;
+  updateTags: (id: string, payload: { primaryCategory?: string | null; dominantColor?: string | null }) => Promise<ClothingItemResponse>;
+  updatingTagItemIds: string[];
 };
 
 export const useWardrobe = (): UseWardrobeResult => {
@@ -40,6 +43,7 @@ export const useWardrobe = (): UseWardrobeResult => {
   const [error, setError] = useState<string | null>(null);
   const [analyzingItemIds, setAnalyzingItemIds] = useState<string[]>([]);
   const [analysisErrors, setAnalysisErrors] = useState<Record<string, string>>({});
+  const [updatingTagItemIds, setUpdatingTagItemIds] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
     if (status !== 'authenticated') {
@@ -176,7 +180,7 @@ export const useWardrobe = (): UseWardrobeResult => {
   );
 
   const upload = useCallback(
-    async ({ file, notes }: { file: File; notes?: string }) => {
+    async ({ file, notes, purchasePrice }: { file: File; notes?: string; purchasePrice?: number | null }) => {
       if (status !== 'authenticated') {
         setError('Please sign in to upload items.');
         throw new ApiError(401, 'Not authenticated');
@@ -190,6 +194,14 @@ export const useWardrobe = (): UseWardrobeResult => {
         formData.append('image', file);
         if (notes?.trim()) {
           formData.append('notes', notes.trim());
+        }
+        if (
+          typeof purchasePrice === 'number' &&
+          Number.isFinite(purchasePrice) &&
+          !Number.isNaN(purchasePrice) &&
+          purchasePrice >= 0
+        ) {
+          formData.append('purchasePrice', purchasePrice.toFixed(2));
         }
 
         const { item } = await uploadWardrobeItem(formData);
@@ -270,6 +282,20 @@ export const useWardrobe = (): UseWardrobeResult => {
     });
   }, []);
 
+  const updateTags = useCallback(
+    async (id: string, payload: { primaryCategory?: string | null; dominantColor?: string | null }) => {
+      setUpdatingTagItemIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+      try {
+        const { item } = await updateWardrobeItemTags(id, payload);
+        setItems((prev) => prev.map((existing) => (existing._id === item._id ? item : existing)));
+        return item;
+      } finally {
+        setUpdatingTagItemIds((prev) => prev.filter((existing) => existing !== id));
+      }
+    },
+    []
+  );
+
   return {
     items,
     isLoading,
@@ -285,5 +311,7 @@ export const useWardrobe = (): UseWardrobeResult => {
     analyzingItemIds,
     analysisErrors,
     clearAnalysisError,
+    updateTags,
+    updatingTagItemIds,
   };
 };

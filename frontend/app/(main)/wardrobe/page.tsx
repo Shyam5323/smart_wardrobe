@@ -21,6 +21,8 @@ export default function WardrobePage() {
     update,
     remove,
     clearError,
+    updateTags,
+    updatingTagItemIds,
   } = useWardrobe();
 
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -29,6 +31,9 @@ export default function WardrobePage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isDetailSaving, setIsDetailSaving] = useState(false);
   const [isDetailDeleting, setIsDetailDeleting] = useState(false);
+  const isSelectedUpdatingTags = selectedItem
+    ? updatingTagItemIds.includes(selectedItem._id)
+    : false;
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
@@ -81,6 +86,7 @@ export default function WardrobePage() {
         isSaving={isDetailSaving}
         isDeleting={isDetailDeleting}
         error={detailError}
+        isUpdatingTags={isSelectedUpdatingTags}
         onClose={() => {
           if (isDetailSaving || isDetailDeleting) return;
           setIsDetailOpen(false);
@@ -118,6 +124,21 @@ export default function WardrobePage() {
             setIsDetailDeleting(false);
           }
         }}
+        onUpdateTags={
+          selectedItem
+            ? async (payload) => {
+                setDetailError(null);
+                try {
+                  const updated = await updateTags(selectedItem._id, payload);
+                  setSelectedItem(updated);
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : 'Unable to update tags.';
+                  setDetailError(message);
+                  throw err;
+                }
+              }
+            : undefined
+        }
       />
     </div>
   );

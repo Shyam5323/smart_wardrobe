@@ -31,6 +31,8 @@ export default function HomePage() {
     analyzingItemIds,
     analysisErrors,
     clearAnalysisError,
+    updateTags,
+    updatingTagItemIds,
   } = useWardrobe();
 
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -53,6 +55,9 @@ export default function HomePage() {
     : null;
   const isSelectedAnalyzing = selectedItem
     ? analyzingItemIds.includes(selectedItem._id) || selectedItem.aiTags?.status === 'processing'
+    : false;
+  const isSelectedUpdatingTags = selectedItem
+    ? updatingTagItemIds.includes(selectedItem._id)
     : false;
 
   // 1️⃣ Loading state
@@ -152,6 +157,7 @@ export default function HomePage() {
         isSaving={isDetailSaving}
         isDeleting={isDetailDeleting}
         error={detailError}
+        isUpdatingTags={isSelectedUpdatingTags}
         onClose={() => {
           if (isDetailSaving || isDetailDeleting) return;
           setIsDetailOpen(false);
@@ -189,6 +195,21 @@ export default function HomePage() {
             setIsDetailDeleting(false);
           }
         }}
+        onUpdateTags={
+          selectedItem
+            ? async (payload) => {
+                setDetailError(null);
+                try {
+                  const updated = await updateTags(selectedItem._id, payload);
+                  setSelectedItem(updated);
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : 'Unable to update tags.';
+                  setDetailError(message);
+                  throw err;
+                }
+              }
+            : undefined
+        }
         aiState={
           selectedItem
             ? {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import full1 from '@/components/assets/full1.png';
 import full2 from '@/components/assets/full2.png';
 import full3 from '@/components/assets/full3.png';
@@ -46,10 +47,13 @@ export default function HomePage() {
 
           {/* Right Side Carousel */}
           <div className="relative w-full h-96 md:h-[28rem] lg:h-[32rem] rounded-xl overflow-hidden shadow-2xl">
-            <img
-              src={carouselImages[currentImage].src}
+            <Image
+              src={carouselImages[currentImage]}
               alt="Wardrobe Carousel"
-              className="w-full h-full object-cover transition-all duration-700"
+              fill
+              className="object-cover transition-all duration-700"
+              sizes="(max-width: 768px) 100vw, (max-width: 1024px) 60vw, 600px"
+              priority
             />
           </div>
         </div>
@@ -60,28 +64,34 @@ export default function HomePage() {
         <h2 className="text-4xl font-bold text-center mb-12">Core Features</h2>
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           <div className="bg-slate-800 rounded-xl p-6 text-center hover:scale-105 transition-transform">
-            <img
-              src={styleImg.src}
+            <Image
+              src={styleImg}
               alt="Outfit Generator"
-              className="mx-auto mb-4 rounded-lg object-cover w-40 h-40"
+              className="mx-auto mb-4 rounded-lg object-cover"
+              width={160}
+              height={160}
             />
             <h3 className="text-xl font-semibold mb-2">AI Outfit Generator</h3>
             <p>Automatically generate outfits based on your wardrobe and preferences.</p>
           </div>
           <div className="bg-slate-800 rounded-xl p-6 text-center hover:scale-105 transition-transform">
-            <img
-              src={plannerImg.src}
+            <Image
+              src={plannerImg}
               alt="Planner"
-              className="mx-auto mb-4 rounded-lg object-cover w-40 h-40"
+              className="mx-auto mb-4 rounded-lg object-cover"
+              width={160}
+              height={160}
             />
             <h3 className="text-xl font-semibold mb-2">Outfit Planner</h3>
             <p>Plan your week, log outfits, and track your clothing usage effortlessly.</p>
           </div>
           <div className="bg-slate-800 rounded-xl p-6 text-center hover:scale-105 transition-transform">
-            <img
-              src={lookbookImg.src}
+            <Image
+              src={lookbookImg}
               alt="Lookbook"
-              className="mx-auto mb-4 rounded-lg object-cover w-40 h-40"
+              className="mx-auto mb-4 rounded-lg object-cover"
+              width={160}
+              height={160}
             />
             <h3 className="text-xl font-semibold mb-2">Lookbook</h3>
             <p>Save and favorite your best outfits to mix and match anytime.</p>
