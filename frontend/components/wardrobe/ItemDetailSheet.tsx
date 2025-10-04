@@ -2,9 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
+import { IndianRupee, Repeat } from 'lucide-react';
 
 import type { ClothingItemResponse, UpdateClothingItemPayload } from '@/lib/api';
 import { CATEGORY_OPTIONS, COLOR_OPTIONS } from '@/lib/constants';
+
+const currencyFormatter = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 export type ItemDetailSheetProps = {
   item: ClothingItemResponse | null;
@@ -24,6 +32,8 @@ export type ItemDetailSheetProps = {
   onClose: () => void;
   onSave: (payload: UpdateClothingItemPayload) => Promise<void> | void;
   onDelete: () => Promise<void> | void;
+  onMarkWorn?: (count?: number) => Promise<void> | void;
+  isMarkingWear?: boolean;
 };
 
 const toNullable = (value: string) => (value.trim() === '' ? null : value.trim());
@@ -41,11 +51,14 @@ export const ItemDetailSheet = ({
   onClose,
   onSave,
   onDelete,
+  onMarkWorn,
+  isMarkingWear = false,
 }: ItemDetailSheetProps) => {
   const [customName, setCustomName] = useState('');
   const [category, setCategory] = useState('');
   const [color, setColor] = useState('');
   const [notes, setNotes] = useState('');
+  const [purchasePrice, setPurchasePrice] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [overrideCategory, setOverrideCategory] = useState('');
@@ -68,6 +81,7 @@ export const ItemDetailSheet = ({
       setCategory('');
       setColor('');
       setNotes('');
+      setPurchasePrice('');
       setIsFavorite(false);
       return;
     }
@@ -76,6 +90,11 @@ export const ItemDetailSheet = ({
     setCategory(item.category ?? '');
     setColor(item.color ?? '');
     setNotes(item.notes ?? '');
+    setPurchasePrice(
+      typeof item.purchasePrice === 'number' && Number.isFinite(item.purchasePrice)
+        ? item.purchasePrice.toFixed(2)
+        : ''
+    );
     setIsFavorite(Boolean(item.isFavorite));
     setOverrideCategory(item.userTags?.primaryCategory ?? '');
     setOverrideColor(item.userTags?.dominantColor ?? '');
@@ -97,6 +116,17 @@ export const ItemDetailSheet = ({
 
     setLocalError(null);
 
+    const trimmedPrice = purchasePrice.trim();
+    let normalizedPrice: number | null = null;
+    if (trimmedPrice !== '') {
+      const parsed = Number.parseFloat(trimmedPrice);
+      if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0) {
+        setLocalError('Purchase price must be a non-negative number.');
+        return;
+      }
+      normalizedPrice = Math.round(parsed * 100) / 100;
+    }
+
     try {
       await onSave({
         customName: toNullable(customName) ?? null,
@@ -104,6 +134,7 @@ export const ItemDetailSheet = ({
         color: toNullable(color) ?? null,
         notes: toNullable(notes) ?? null,
         isFavorite,
+        purchasePrice: normalizedPrice,
       });
     } catch (err) {
       if (err instanceof Error) {
@@ -171,6 +202,65 @@ export const ItemDetailSheet = ({
                 </p>
               )}
             </div>
+
+            {item && (
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
+                    Wear tracker
+                  </span>
+                  {onMarkWorn && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!onMarkWorn || isMarkingWear || isSaving || isDeleting) return;
+                        setLocalError(null);
+                        Promise.resolve(onMarkWorn())
+                          .catch((err) => {
+                            if (err instanceof Error) {
+                              setLocalError(err.message);
+                            } else {
+                              setLocalError('Unable to log wear right now.');
+                            }
+                          });
+                      }}
+                      disabled={isMarkingWear || isSaving || isDeleting}
+                      className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isMarkingWear ? 'Logging…' : 'Mark worn'}
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-center">
+                    <Repeat className="mx-auto mb-2 h-4 w-4 text-slate-400" />
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Times worn</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-100">{item.timesWorn ?? 0}</p>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-center">
+                    <IndianRupee className="mx-auto mb-2 h-4 w-4 text-slate-400" />
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Purchase price</p>
+                    <p className="mt-1 text-base font-semibold text-slate-100">
+                      {typeof item.purchasePrice === 'number' && Number.isFinite(item.purchasePrice)
+                        ? currencyFormatter.format(item.purchasePrice)
+                        : '—'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-center">
+                    <IndianRupee className="mx-auto mb-2 h-4 w-4 text-emerald-300" />
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Cost per wear</p>
+                    <p className="mt-1 text-base font-semibold text-emerald-300">
+                      {typeof item.costPerWear === 'number' && Number.isFinite(item.costPerWear)
+                        ? currencyFormatter.format(item.costPerWear)
+                        : '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -440,6 +530,21 @@ export const ItemDetailSheet = ({
                   value={color}
                   onChange={(event) => setColor(event.target.value)}
                   placeholder="Blue, Earth-tone, etc."
+                  className="w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  disabled={isSaving || isDeleting || isLoading}
+                />
+              </label>
+
+              <label className="space-y-2 text-sm">
+                <span className="block text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Purchase price</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={purchasePrice}
+                  onChange={(event) => setPurchasePrice(event.target.value)}
+                  placeholder="₹2499"
                   className="w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                   disabled={isSaving || isDeleting || isLoading}
                 />

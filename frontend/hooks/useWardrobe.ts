@@ -13,6 +13,7 @@ import {
   uploadWardrobeItem,
   analyzeWardrobeItem,
   updateWardrobeItemTags,
+  markWardrobeItemWorn,
 } from '@/lib/api';
 import { useAuth } from '@/components/providers/AuthProvider';
 
@@ -33,6 +34,7 @@ export type UseWardrobeResult = {
   clearAnalysisError: (itemId: string) => void;
   updateTags: (id: string, payload: { primaryCategory?: string | null; dominantColor?: string | null }) => Promise<ClothingItemResponse>;
   updatingTagItemIds: string[];
+  markAsWorn: (id: string, count?: number) => Promise<ClothingItemResponse>;
 };
 
 export const useWardrobe = (): UseWardrobeResult => {
@@ -268,6 +270,12 @@ export const useWardrobe = (): UseWardrobeResult => {
     return item;
   }, []);
 
+  const markAsWorn = useCallback(async (id: string, count = 1) => {
+    const { item } = await markWardrobeItemWorn(id, count > 0 ? { count } : {});
+    setItems((prev) => prev.map((existing) => (existing._id === item._id ? item : existing)));
+    return item;
+  }, []);
+
   const remove = useCallback(async (id: string) => {
     await deleteWardrobeItem(id);
     setItems((prev) => prev.filter((existing) => existing._id !== id));
@@ -313,5 +321,6 @@ export const useWardrobe = (): UseWardrobeResult => {
     clearAnalysisError,
     updateTags,
     updatingTagItemIds,
+    markAsWorn,
   };
 };

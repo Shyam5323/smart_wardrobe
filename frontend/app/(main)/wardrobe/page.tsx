@@ -23,6 +23,7 @@ export default function WardrobePage() {
     clearError,
     updateTags,
     updatingTagItemIds,
+    markAsWorn,
   } = useWardrobe();
 
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -31,6 +32,7 @@ export default function WardrobePage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isDetailSaving, setIsDetailSaving] = useState(false);
   const [isDetailDeleting, setIsDetailDeleting] = useState(false);
+  const [isMarkingWear, setIsMarkingWear] = useState(false);
   const isSelectedUpdatingTags = selectedItem
     ? updatingTagItemIds.includes(selectedItem._id)
     : false;
@@ -67,6 +69,7 @@ export default function WardrobePage() {
             setIsDetailOpen(true);
             setIsDetailLoading(true);
             setDetailError(null);
+            setIsMarkingWear(false);
             try {
               const item = await fetchById(id);
               setSelectedItem(item);
@@ -87,11 +90,13 @@ export default function WardrobePage() {
         isDeleting={isDetailDeleting}
         error={detailError}
         isUpdatingTags={isSelectedUpdatingTags}
+        isMarkingWear={isMarkingWear}
         onClose={() => {
           if (isDetailSaving || isDetailDeleting) return;
           setIsDetailOpen(false);
           setSelectedItem(null);
           setDetailError(null);
+          setIsMarkingWear(false);
         }}
         onSave={async (payload: UpdateClothingItemPayload) => {
           if (!selectedItem) return;
@@ -124,6 +129,23 @@ export default function WardrobePage() {
             setIsDetailDeleting(false);
           }
         }}
+        onMarkWorn=
+          {selectedItem
+            ? async () => {
+                setDetailError(null);
+                setIsMarkingWear(true);
+                try {
+                  const updated = await markAsWorn(selectedItem._id);
+                  setSelectedItem(updated);
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : 'Unable to log wear.';
+                  setDetailError(message);
+                  throw err;
+                } finally {
+                  setIsMarkingWear(false);
+                }
+              }
+            : undefined}
         onUpdateTags={
           selectedItem
             ? async (payload) => {
