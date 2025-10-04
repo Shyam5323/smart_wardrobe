@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs/promises');
 
-const { ClothingItem } = require('../models');
+const { ClothingItem, WearLog } = require('../models');
 const { analyzeItemFromPath, generateBackgroundRemovedImage } = require('../services/wolfram');
 const { formatItemForResponse } = require('../utils/itemResponse');
 
@@ -377,9 +377,114 @@ exports.logWear = async (req, res, next) => {
     item.timesWorn = (item.timesWorn || 0) + parsedCount;
     item.markModified('timesWorn');
 
-    await item.save();
+    const providedDate = req.body?.wornAt || req.body?.date;
+    let wornAt = new Date();
+    if (providedDate) {
+      const parsedDate = new Date(providedDate);
+      if (!Number.isNaN(parsedDate.valueOf())) {
+        wornAt = parsedDate;
+      }
+    }
+
+    await Promise.all([
+      item.save(),
+      WearLog.create({
+        userId: req.userId,
+        itemId: item._id,
+        count: parsedCount,
+        wornAt,
+        source: 'manual',
+      }).catch((error) => {
+        console.error('Failed to persist wear log entry:', error);
+        return null;
+      }),
+    ]);
 
     res.json({ item: formatItemForResponse(req, item) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const clampDaysRange = (value, defaultValue) => {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric) || Number.isNaN(numeric) || numeric <= 0) {
+    return defaultValue;
+  }
+
+  return Math.min(Math.max(numeric, 1), 365);
+};
+
+exports.listWearLogs = async (req, res, next) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ message: 'Authentication required.' });
+    }
+
+    const now = new Date();
+    const days = clampDaysRange(req.query?.days, 60);
+
+    let toDate = req.query?.to ? new Date(req.query.to) : new Date(now);
+    if (Number.isNaN(toDate.valueOf())) {
+      toDate = new Date(now);
+    }
+
+    let fromDate;
+    if (req.query?.from) {
+      fromDate = new Date(req.query.from);
+      if (Number.isNaN(fromDate.valueOf())) {
+        fromDate = new Date(toDate);
+      }
+    } else {
+      fromDate = new Date(toDate);
+      fromDate.setDate(fromDate.getDate() - (days - 1));
+    }
+
+    const normalizedFrom = new Date(fromDate);
+    normalizedFrom.setHours(0, 0, 0, 0);
+    const normalizedTo = new Date(toDate);
+    normalizedTo.setHours(23, 59, 59, 999);
+
+    const logs = await WearLog.find({
+      userId: req.userId,
+      wornAt: { $gte: normalizedFrom, $lte: normalizedTo },
+    })
+      .sort({ wornAt: 1 })
+      .populate('itemId');
+
+    const grouped = new Map();
+
+    for (const log of logs) {
+      const dateKey = log.wornAt.toISOString().slice(0, 10);
+      let entry = grouped.get(dateKey);
+      if (!entry) {
+        entry = { date: dateKey, items: [] };
+        grouped.set(dateKey, entry);
+      }
+
+      const populatedItem = log.itemId && typeof log.itemId === 'object' && log.itemId._id ? log.itemId : null;
+
+      entry.items.push({
+        itemId: populatedItem ? populatedItem._id.toString() : log.itemId?.toString?.() || null,
+        count: log.count || 1,
+        wornAt: log.wornAt.toISOString(),
+        item: populatedItem ? formatItemForResponse(req, populatedItem) : null,
+      });
+    }
+
+    res.json({
+      logs: Array.from(grouped.values()),
+      meta: {
+        from: normalizedFrom.toISOString(),
+        to: normalizedTo.toISOString(),
+        days,
+        totalEntries: logs.length,
+      },
+    });
   } catch (error) {
     next(error);
   }

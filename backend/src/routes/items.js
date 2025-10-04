@@ -40,6 +40,7 @@ const upload = multer({
 
 router.get('/', authenticate, itemController.listItems);
 router.post('/upload', authenticate, upload.single('image'), itemController.uploadItem);
+router.get('/wear/logs', authenticate, itemController.listWearLogs);
 router.get('/:id', authenticate, itemController.getItem);
 router.put('/:id/tags', authenticate, itemController.updateItemTags);
 router.post('/:id/wear', authenticate, itemController.logWear);
