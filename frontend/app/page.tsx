@@ -138,7 +138,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-10xl px-4 py-12 lg:px-8">
+    <div className="mx-auto w-full max-w-7xl px-4 py-12 lg:px-8">
       <header className="mb-10 flex flex-wrap items-start justify-between gap-4 lg:gap-6">
         <div className="max-w-2xl">
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Wardrobe Uploader</h1>
@@ -146,7 +146,19 @@ export default function HomePage() {
             Add pieces to your virtual closet and preview them instantly before AI styling kicks in.
           </p>
         </div>
-
+        <div className="flex items-center gap-4 rounded-full border border-slate-800 bg-slate-900/60 px-4 py-2 text-sm">
+          <div className="text-left">
+            <p className="font-medium text-slate-100">{user?.displayName || user?.email}</p>
+            <p className="text-xs text-slate-500">{user?.email}</p>
+          </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-300 transition hover:bg-slate-700"
+          >
+            Log out
+          </button>
+        </div>
       </header>
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
