@@ -159,9 +159,42 @@ export const ItemDetailSheet = ({
     }
   };
 
+  const handleManualOverrideSubmit = async () => {
+    if (!item || !onUpdateTags) return;
+    setLocalError(null);
+    try {
+      await onUpdateTags({
+        primaryCategory: overrideCategory.trim() === '' ? null : overrideCategory,
+        dominantColor: overrideColor.trim() === '' ? null : overrideColor,
+      });
+    } catch (err) {
+      if (err instanceof Error) {
+        setLocalError(err.message);
+      } else {
+        setLocalError('Unable to update tags.');
+      }
+    }
+  };
+
+  const handleManualOverrideClear = async () => {
+    if (!onUpdateTags || !item) return;
+    setLocalError(null);
+    setOverrideCategory('');
+    setOverrideColor('');
+    try {
+      await onUpdateTags({ primaryCategory: null, dominantColor: null });
+    } catch (err) {
+      if (err instanceof Error) {
+        setLocalError(err.message);
+      } else {
+        setLocalError('Unable to clear overrides.');
+      }
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-8">
-      <div className="relative flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl">
+      <div className="relative flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl max-h-[90vh]">
         <button
           type="button"
           onClick={onClose}
@@ -170,42 +203,34 @@ export const ItemDetailSheet = ({
           Close
         </button>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-          <div className="relative h-80 w-full bg-slate-950">
-            {isLoading ? (
-              <div className="flex h-full w-full items-center justify-center text-sm text-slate-500">
-                Loading…
-              </div>
-            ) : item?.imageUrl ? (
-              <Image
-                src={item.imageUrl}
-                alt={item.customName || item.notes || item.originalName || 'Wardrobe item'}
-                fill
-                className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 50vw"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-xs uppercase tracking-[0.2em] text-slate-600">
-                No image available
-              </div>
-            )}
-          </div>
-
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-6">
-            <div>
-              <h2 className="text-2xl font-semibold">
-                {customName || item?.originalName || 'Wardrobe item'}
-              </h2>
-              {item?.uploadedAt && (
-                <p className="text-xs text-slate-500">
-                  Added {new Date(item.uploadedAt).toLocaleString()}
-                </p>
+  <div className="grid flex-1 min-h-0 gap-6 overflow-y-auto p-6 pt-10 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:overflow-hidden lg:pt-12">
+          <div className="flex min-h-0 flex-col gap-4">
+            <div
+              className="relative w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950"
+              style={{ aspectRatio: '3 / 4' }}
+            >
+              {isLoading ? (
+                <div className="flex h-full w-full items-center justify-center text-sm text-slate-500">
+                  Loading…
+                </div>
+              ) : item?.imageUrl ? (
+                <Image
+                  src={item.imageUrl}
+                  alt={item.customName || item.notes || item.originalName || 'Wardrobe item'}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs uppercase tracking-[0.2em] text-slate-600">
+                  No image available
+                </div>
               )}
             </div>
 
             {item && (
               <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <span className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
                     Wear tracker
                   </span>
@@ -232,7 +257,7 @@ export const ItemDetailSheet = ({
                   )}
                 </div>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-center">
                     <Repeat className="mx-auto mb-2 h-4 w-4 text-slate-400" />
                     <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Times worn</p>
@@ -261,6 +286,19 @@ export const ItemDetailSheet = ({
                 </div>
               </div>
             )}
+          </div>
+
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-4 lg:overflow-y-auto">
+            <div>
+              <h2 className="text-2xl font-semibold">
+                {customName || item?.originalName || 'Wardrobe item'}
+              </h2>
+              {item?.uploadedAt && (
+                <p className="text-xs text-slate-500">
+                  Added {new Date(item.uploadedAt).toLocaleString()}
+                </p>
+              )}
+            </div>
 
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -392,26 +430,7 @@ export const ItemDetailSheet = ({
               )}
 
               {onUpdateTags && (
-                <form
-                  className="mt-4 space-y-4 rounded-lg border border-slate-800 bg-slate-950/80 p-4"
-                  onSubmit={async (event) => {
-                    event.preventDefault();
-                    if (!item) return;
-                    setLocalError(null);
-                    try {
-                      await onUpdateTags({
-                        primaryCategory: overrideCategory.trim() === '' ? null : overrideCategory,
-                        dominantColor: overrideColor.trim() === '' ? null : overrideColor,
-                      });
-                    } catch (err) {
-                      if (err instanceof Error) {
-                        setLocalError(err.message);
-                      } else {
-                        setLocalError('Unable to update tags.');
-                      }
-                    }
-                  }}
-                >
+                <div className="mt-4 space-y-4 rounded-lg border border-slate-800 bg-slate-950/80 p-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Manual override
@@ -463,7 +482,11 @@ export const ItemDetailSheet = ({
 
                   <div className="flex flex-wrap gap-2">
                     <button
-                      type="submit"
+                      type="button"
+                      onClick={() => {
+                        if (isUpdatingTags || isLoading) return;
+                        void handleManualOverrideSubmit();
+                      }}
                       className="rounded-full bg-indigo-500/90 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={isUpdatingTags || isLoading}
                     >
@@ -472,20 +495,9 @@ export const ItemDetailSheet = ({
                     {(manualTags?.primaryCategory || manualTags?.dominantColor) && (
                       <button
                         type="button"
-                        onClick={async () => {
-                          if (!onUpdateTags || !item) return;
-                          setLocalError(null);
-                          setOverrideCategory('');
-                          setOverrideColor('');
-                          try {
-                            await onUpdateTags({ primaryCategory: null, dominantColor: null });
-                          } catch (err) {
-                            if (err instanceof Error) {
-                              setLocalError(err.message);
-                            } else {
-                              setLocalError('Unable to clear overrides.');
-                            }
-                          }
+                        onClick={() => {
+                          if (isUpdatingTags || isLoading) return;
+                          void handleManualOverrideClear();
                         }}
                         disabled={isUpdatingTags || isLoading}
                         className="rounded-full border border-slate-700 px-4 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
@@ -494,7 +506,7 @@ export const ItemDetailSheet = ({
                       </button>
                     )}
                   </div>
-                </form>
+                </div>
               )}
             </div>
 

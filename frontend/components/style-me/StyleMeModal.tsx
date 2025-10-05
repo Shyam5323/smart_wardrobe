@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, JSX } from 'react';
 import Image from 'next/image';
 import { X, Sun, Briefcase, Coffee } from 'lucide-react';
 
