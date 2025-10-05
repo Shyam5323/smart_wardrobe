@@ -8,7 +8,49 @@ const outfitRoutes = require('./routes/outfits');
 
 const app = express();
 
-app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*' }));
+const parseAllowedOrigins = () => {
+  if (!process.env.CORS_ORIGIN) {
+    return ['http://localhost:3000'];
+  }
+
+  return process.env.CORS_ORIGIN.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+};
+
+const allowedOrigins = parseAllowedOrigins();
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      const matchesWildcard = allowedOrigins.some((pattern) => {
+        if (!pattern.includes('*')) {
+          return false;
+        }
+
+        const regex = new RegExp(`^${pattern.split('*').map(escapeRegex).join('.*')}$`);
+        return regex.test(origin);
+      });
+
+      if (matchesWildcard) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
