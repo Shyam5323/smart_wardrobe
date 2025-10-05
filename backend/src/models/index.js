@@ -8,4 +8,5 @@ module.exports = {
   CommunityPollVote: require('./CommunityPollVote'),
   StyleChallenge: require('./StyleChallenge'),
   WardrobeAnalytics: require('./WardrobeAnalytics'),
+  WearLog: require('./WearLog'),
 };
